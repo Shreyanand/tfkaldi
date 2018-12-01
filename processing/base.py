@@ -56,7 +56,7 @@ def mfcc(signal, samplerate, conf):
     feat = lifter(feat, float(conf['ceplifter']))
     return feat, numpy.log(energy)
 
-def fbank(signal, samplerate, conf):
+def fbank(signal, articulator, samplerate, conf):
     '''
     Compute fbank features from an audio signal.
 
@@ -94,8 +94,30 @@ def fbank(signal, samplerate, conf):
 
     # if feat is zero, we get problems with log
     feat = numpy.where(feat == 0, numpy.finfo(float).eps, feat)
+    
+    articulator = sigproc.preemphasis(articulator, float(conf['preemph']))
+    art_frames = sigproc.framesig(articulator, float(conf['winlen'])*samplerate,
+                              float(conf['winstep'])*samplerate)
+    art_pspec = sigproc.powspec(art_frames, int(conf['nfft']))
 
-    return feat, energy
+    # this stores the total energy in each frame
+    art_energy = numpy.sum(art_pspec, 1)
+
+    # if energy is zero, we get problems with log
+    art_energy = numpy.where(art_energy == 0, numpy.finfo(float).eps, art_energy)
+
+    art_filterbank = get_filterbanks(int(conf['nfilt']), int(conf['nfft']),
+                                 samplerate, int(conf['lowfreq']), highfreq)
+
+    # compute the filterbank energies
+    art_feat = numpy.dot(art_pspec, art_filterbank.T)
+
+    # if feat is zero, we get problems with log
+    art_feat = numpy.where(feat == 0, numpy.finfo(float).eps, art_feat)
+    
+    print(feat.shape, art_feat.shape)
+
+    return numpy.concatenate((feat, art_feat), axis=0), energy
 
 def logfbank(signal, samplerate, conf):
     '''
